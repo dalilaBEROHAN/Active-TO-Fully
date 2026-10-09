@@ -4,748 +4,445 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ActiveTOFully OBGYN HSIJB</title>
-    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- Babel (To compile JSX in the browser) -->
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Tailwind CSS for Styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- FontAwesome for Icons (Replacing Lucide for single-file simplicity) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase Compat SDK (V8/V9 Compat for standalone HTML) -->
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 
     <style>
-        /* Custom Animations */
-        @keyframes urgentBlink {
-          0%, 100% { background-color: #ef4444; color: white; box-shadow: 0 0 15px rgba(239, 68, 68, 0.8); border-color: #b91c1c; transform: scale(1); }
-          50% { background-color: #dc2626; color: #fecaca; box-shadow: 0 0 25px rgba(220, 38, 38, 1); border-color: #991b1b; transform: scale(1.05); }
+        @keyframes custom-blink {
+            0%, 100% { opacity: 1; transform: scale(1); background-color: #ef4444; color: white;}
+            50% { opacity: 0.8; transform: scale(1.02); background-color: #fee2e2; color: #b91c1c;}
         }
-        .animate-urgent-blink {
-          animation: urgentBlink 0.3s ease-in-out infinite;
+        .animate-blink { animation: custom-blink 1s infinite; }
+        
+        @keyframes warning-blink {
+            0%, 100% { background-color: #fef08a; color: #000; }
+            50% { background-color: #ca8a04; color: #fff; }
         }
-        @keyframes warningBlink {
-          0%, 100% { background-color: #facc15; color: black; box-shadow: 0 0 15px rgba(250, 204, 21, 0.8); border-color: #ca8a04; transform: scale(1); }
-          50% { background-color: #fef08a; color: black; box-shadow: 0 0 25px rgba(250, 204, 21, 1); border-color: #eab308; transform: scale(1.02); }
-        }
-        .animate-warning-blink {
-          animation: warningBlink 0.5s ease-in-out infinite;
-        }
+        .animate-warning-blink { animation: warning-blink 1.5s infinite; }
+
+        .tag-red { background-color: #fee2e2; }
+        .tag-yellow { background-color: #fef08a; }
+        .tag-green { background-color: #dcfce3; }
+        .tag-white { background-color: #ffffff; }
     </style>
 </head>
-<body class="bg-slate-50 font-sans">
-    
+<body class="bg-gray-50 min-h-screen">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        // --- 1. FIREBASE INITIALIZATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDfEkexQwYJvNHh8M-aDEL3IjIL0toymTE",
+            authDomain: "atof-e7735.firebaseapp.com",
+            projectId: "atof-e7735",
+            storageBucket: "atof-e7735.firebasestorage.app",
+            messagingSenderId: "171236957444",
+            appId: "1:171236957444:web:3d6902af5bbe3531fd8451"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
-        const MAX_BEDS = 6;
-        const FOUR_HOURS_MS = 4 * 60 * 60 * 1000; 
-        const ONE_HOUR_MS = 60 * 60 * 1000;
-
-        const TAG_PRIORITY = {
-          'Red': 1,
-          'Yellow': 2,
-          'Green': 3,
-          'White': 4
+        // Constants & Utilities
+        const BED_CAPACITY = 6;
+        const tagPriority = { "Red": 1, "Yellow": 2, "Green": 3, "White": 4 };
+        
+        const getValidDate = (ts) => {
+            if (!ts) return new Date();
+            return ts.toDate ? ts.toDate() : new Date(ts);
         };
 
-        const COMORBIDITIES = [
-          { id: 'pe_severe', label: 'Pre-eclampsia with severe features or eclampsia', points: 5 },
-          { id: 'chf', label: 'Congestive heart failure', points: 5 },
-          { id: 'p_htn', label: 'Pulmonary hypertension', points: 4 },
-          { id: 'cong_heart', label: 'Congenital heart and/or Valvular disease', points: 4 },
-          { id: 'placenta', label: 'Placenta previa/Suspected accreta/Abruption', points: 4 },
-          { id: 'ihd_arrhythmia', label: 'Ischemic heart disease/Cardiac arrhythmia', points: 3 },
-          { id: 'sickle_coag', label: 'Sickle cell/Bleeding disorder/Coagulopathy', points: 3 },
-          { id: 'age_gt_44', label: 'Maternal age >44', points: 3 },
-          { id: 'bmi_gt_50', label: 'BMI >50', points: 3 },
-          { id: 'pe_htn', label: 'Pre-eclampsia/Gestational HTN/Chronic HTN', points: 2 },
-          { id: 'mult_gest', label: 'Multiple gestation', points: 2 },
-          { id: 'iufd', label: 'Intrauterine fetal demise', points: 2 },
-          { id: 'autoimmune', label: 'Autoimmune disease/Lupus', points: 2 },
-          { id: 'hiv', label: 'HIV/AIDS', points: 2 },
-          { id: 'neuro', label: 'Epilepsy/CVA/Neuromuscular disorder', points: 2 },
-          { id: 'age_40_44', label: 'Maternal age 40–44', points: 2 },
-          { id: 'substance', label: 'Substance use disorder', points: 2 },
-          { id: 'bmi_gt_40', label: 'BMI >40', points: 2 },
-          { id: 'prev_cs', label: 'Previous cesarean delivery/Myomectomy', points: 1 },
-          { id: 'ckd', label: 'Chronic renal disease', points: 1 },
-          { id: 'asthma', label: 'Asthma', points: 1 },
-          { id: 'dm_insulin', label: 'Diabetes on insulin', points: 1 },
-          { id: 'alcohol', label: 'Alcohol abuse', points: 1 }
-        ];
-
-        const HIGH_RISK_CRITERIA = [
-          { id: 'prev_cs', label: '1 Previous CS' },
-          { id: 'myomectomy', label: 'H/O Myomectomy' },
-          { id: 'grandmultipara', label: 'Grandmultipara' },
-          { id: 'hx_pph', label: 'History of PPH' },
-          { id: 'prev_lap', label: 'H/O previous laparotomy' },
-          { id: 'shoulder_dystocia', label: 'H/O shoulder dystocia' },
-          { id: 'macrosomia', label: 'H/O previous baby > 3.9kg' },
-          { id: 'hx_pe', label: 'H/O pre/eclampsia' }
-        ];
-
-        const LOCATIONS = ['Ward 4A', 'Ward 4B', 'Patient Assessment Centre (PAC)'];
-
-        const ANTENATAL_TAGS = {
-          'Red': { bg: 'bg-red-50', badge: 'bg-red-500 text-white', label: 'Red (Emergency)' },
-          'Yellow': { bg: 'bg-yellow-50', badge: 'bg-yellow-400 text-yellow-950', label: 'Yellow (Urgent)' },
-          'Green': { bg: 'bg-emerald-50', badge: 'bg-emerald-500 text-white', label: 'Green (Moderate)' },
-          'White': { bg: 'bg-white', badge: 'bg-slate-200 text-slate-800', label: 'White (Low Risk)' }
+        const formatDuration = (ms) => {
+            if (!ms || ms < 0) return "0h 0m";
+            const h = Math.floor(ms / 3600000);
+            const m = Math.floor((ms % 3600000) / 60000);
+            return `${h}h ${m}m`;
         };
 
-        const formatWaitTime = (startTime, currentTime) => {
-          const diffMs = currentTime - startTime;
-          const hours = Math.floor(diffMs / (1000 * 60 * 60));
-          const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-          return `${hours}h ${minutes}m`;
+        const formatTimeOnly = (dateStr) => {
+            if(!dateStr) return "-";
+            const d = new Date(dateStr);
+            return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         };
 
-        // Audio System
-        let audioCtx = null;
-        const initAudio = () => {
-          if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          }
-          if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-          }
-        };
+        const App = () => {
+            const [started, setStarted] = React.useState(false);
+            const [now, setNow] = React.useState(new Date());
+            const [patients, setPatients] = React.useState([]);
+            const [archives, setArchives] = React.useState([]);
+            
+            const [doctorsOnDuty, setDoctorsOnDuty] = React.useState(2);
+            const [nursesOnDuty, setNursesOnDuty] = React.useState(4);
+            const [activeTab, setActiveTab] = React.useState('waitlist');
 
-        const playTone = (frequency, type, duration) => {
-          if (!audioCtx) return;
-          try {
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.type = type;
-            oscillator.frequency.value = frequency;
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.start();
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
-            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
-            setTimeout(() => oscillator.stop(), duration * 1000);
-          } catch (e) {}
-        };
-
-        const playSuccessSound = () => {
-          playTone(523.25, 'sine', 0.1); // C5
-          setTimeout(() => playTone(659.25, 'sine', 0.2), 100); // E5
-        };
-
-        const playNoticeSound = () => {
-          playTone(440, 'sine', 0.2); // A4
-          setTimeout(() => playTone(440, 'sine', 0.3), 200); 
-        };
-
-        const playAlarmSound = () => {
-          if (!audioCtx) return;
-          let count = 0;
-          const interval = setInterval(() => {
-            try {
-              const osc = audioCtx.createOscillator();
-              const gain = audioCtx.createGain();
-              osc.connect(gain);
-              gain.connect(audioCtx.destination);
-              osc.type = 'square';
-              osc.frequency.setValueAtTime(count % 2 === 0 ? 800 : 600, audioCtx.currentTime);
-              osc.start();
-              gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.25);
-              osc.stop(audioCtx.currentTime + 0.25);
-              count++;
-              if (count >= 20) clearInterval(interval); 
-            } catch(e) { clearInterval(interval); }
-          }, 250);
-        };
-
-        // Main App Component
-        function App() {
-          const [sessionStarted, setSessionStarted] = useState(false);
-          const [activeTab, setActiveTab] = useState('waitlist'); 
-          const [showAddForm, setShowAddForm] = useState(false);
-          const [currentTime, setCurrentTime] = useState(Date.now());
-          const [doctorsCount, setDoctorsCount] = useState(3);
-          const [nursesCount, setNursesCount] = useState(8);
-          
-          const [alerts, setAlerts] = useState([]);
-          const notifiedOverdueRef = useRef(new Set());
-          const [lrCallNotified, setLrCallNotified] = useState(false);
-          const [emptyBedTimers, setEmptyBedTimers] = useState([]);
-
-          // Waitlist
-          const [waitlist, setWaitlist] = useState([
-            {
-              id: 'w1', name: 'Nadia Hassan', rn: 'RN-10027', location: 'Patient Assessment Centre (PAC)',
-              gravida: '5', para: '4', dilation: '9', antenatalTag: 'Red', notes: 'Fully dilated in PAC, immediate transfer required!',
-              comorbidities: ['mult_gest'], highRiskCriteria: ['grandmultipara'], cmiScore: 2, addedAt: Date.now() - (5 * 60000)
-            },
-            {
-              id: 'w2', name: 'Amina binti Yusuf', rn: 'RN-10021', location: 'Patient Assessment Centre (PAC)',
-              gravida: '1', para: '0', dilation: '8', antenatalTag: 'Yellow', notes: 'Fetal bradycardia, prep for EmLSCS if no progress.',
-              comorbidities: ['pe_severe'], highRiskCriteria: [], cmiScore: 5, addedAt: Date.now() - (25 * 60000) 
-            },
-            {
-              id: 'w3', name: 'Siti Nurhaliza', rn: 'RN-10022', location: 'Ward 4A',
-              gravida: '3', para: '2', dilation: '6', antenatalTag: 'Red', notes: 'Severe pain, requesting epidural. BP 150/100.',
-              comorbidities: ['prev_cs', 'bmi_gt_40', 'pe_htn'], highRiskCriteria: ['prev_cs', 'hx_pph', 'hx_pe'], cmiScore: 5, addedAt: Date.now() - (150 * 60000) 
-            },
-            {
-              id: 'w4', name: 'Emily Chen', rn: 'RN-10026', location: 'Ward 4B',
-              gravida: '2', para: '1', dilation: '7', antenatalTag: 'Green', notes: 'Active phase, progressing steadily.',
-              comorbidities: ['asthma'], highRiskCriteria: [], cmiScore: 1, addedAt: Date.now() - (60 * 60000) 
-            },
-            {
-              id: 'w5', name: 'Mei Ling', rn: 'RN-10023', location: 'Patient Assessment Centre (PAC)',
-              gravida: '2', para: '1', dilation: '4', antenatalTag: 'Yellow', notes: 'Coping well, contractions 3 in 10 mins.',
-              comorbidities: ['dm_insulin'], highRiskCriteria: ['macrosomia'], cmiScore: 1, addedAt: Date.now() - (260 * 60000) 
-            },
-            {
-              id: 'w6', name: 'Priya Sharma', rn: 'RN-10024', location: 'Ward 4A',
-              gravida: '4', para: '3', dilation: '5', antenatalTag: 'White', notes: 'Awaiting LR bed. Multipara, might progress fast.',
-              comorbidities: [], highRiskCriteria: [], cmiScore: 0, addedAt: Date.now() - (80 * 60000)
-            },
-            {
-              id: 'w7', name: 'Fatima Zahra', rn: 'RN-10025', location: 'Patient Assessment Centre (PAC)',
-              gravida: '1', para: '0', dilation: '2', antenatalTag: 'Green', notes: 'Early labor. Keep in view for discharge if no progress.',
-              comorbidities: [], highRiskCriteria: [], cmiScore: 0, addedAt: Date.now() - (310 * 60000) 
-            },
-            {
-              id: 'w8', name: 'Grace Lee', rn: 'RN-10028', location: 'Ward 4B',
-              gravida: '1', para: '0', dilation: '3', antenatalTag: 'White', notes: 'IOL day 1, mild cramps.',
-              comorbidities: ['age_gt_44'], highRiskCriteria: [], cmiScore: 3, addedAt: Date.now() - (190 * 60000) 
-            }
-          ]);
-          
-          const [admitted, setAdmitted] = useState([
-            {
-              id: 'a1', name: 'Roshini Patel', rn: 'RN-10019', location: 'Patient Assessment Centre (PAC)',
-              gravida: '2', para: '1', dilation: '10', antenatalTag: 'Green', notes: 'Active pushing.',
-              comorbidities: [], highRiskCriteria: [], cmiScore: 0, addedAt: Date.now() - (400 * 60000), admittedAt: Date.now() - (120 * 60000), acceptedAt: Date.now() - (115 * 60000)
-            },
-            {
-              id: 'a2', name: 'Nurul Huda', rn: 'RN-10020', location: 'Ward 4A',
-              gravida: '3', para: '1', dilation: '8', antenatalTag: 'Red', notes: 'APH, stabilized.',
-              comorbidities: ['placenta'], highRiskCriteria: ['prev_cs'], cmiScore: 4, addedAt: Date.now() - (200 * 60000), admittedAt: Date.now() - (45 * 60000), acceptedAt: null
-            }
-          ]);
-
-          const [formData, setFormData] = useState({
-            name: '', rn: '', location: 'Patient Assessment Centre (PAC)',
-            gravida: '', para: '', dilation: '', antenatalTag: 'White',
-            notes: '', comorbidities: [], highRiskCriteria: []
-          });
-
-          const availableBeds = MAX_BEDS - admitted.length;
-          const overdueCount = waitlist.filter(p => (currentTime - p.addedAt) >= FOUR_HOURS_MS).length;
-
-          const handleStartSession = () => {
-            initAudio();
-            setSessionStarted(true);
-          };
-
-          const addAlertMessage = (message, type = 'info') => {
-            const id = crypto.randomUUID();
-            setAlerts(prev => [...prev, { id, message, type }]);
-            setTimeout(() => {
-              setAlerts(prev => prev.filter(a => a.id !== id));
-            }, 8000); 
-          };
-
-          // Timers and Alarms
-          useEffect(() => {
-            if (!sessionStarted) return;
-            const timer = setInterval(() => {
-              setCurrentTime(Date.now());
-            }, 60000); 
-            return () => clearInterval(timer);
-          }, [sessionStarted]);
-
-          useEffect(() => {
-            if (!sessionStarted) return;
-            let alarmTriggered = false;
-            waitlist.forEach(p => {
-              if (currentTime - p.addedAt >= FOUR_HOURS_MS && !notifiedOverdueRef.current.has(p.id)) {
-                notifiedOverdueRef.current.add(p.id);
-                alarmTriggered = true;
-              }
+            const [formData, setFormData] = React.useState({
+                name: '', mrn: '', ward: 'PAC', tag: 'Green', 
+                obCmiScore: 0, highRiskInfo: []
             });
-            if (alarmTriggered) {
-              playAlarmSound();
-              addAlertMessage("🚨 CRITICAL: Patient waiting > 4 Hours! Immediate action required.", "danger");
-            }
-          }, [currentTime, waitlist, sessionStarted]);
 
-          useEffect(() => {
-            if (!sessionStarted) return;
-            if (availableBeds > 0 && waitlist.length > 0) {
-              if (!lrCallNotified) {
-                playSuccessSound();
-                addAlertMessage("🛏️ LR Bed Available! You can transfer a patient from the waitlist.", "success");
-                setLrCallNotified(true);
-              }
-            } else {
-              setLrCallNotified(false);
-            }
-          }, [availableBeds, waitlist.length, lrCallNotified, sessionStarted]);
+            // Timers & Alarms
+            React.useEffect(() => {
+                const interval = setInterval(() => setNow(new Date()), 60000);
+                return () => clearInterval(interval);
+            }, []);
 
-          useEffect(() => {
-            if (!sessionStarted) return;
-            let trigger = false;
-            setEmptyBedTimers(prev => prev.map(bed => {
-              if (currentTime - bed.emptySince >= ONE_HOUR_MS && !bed.notified) {
-                trigger = true;
-                return { ...bed, notified: true };
-              }
-              return bed;
-            }));
-            if (trigger) {
-              playNoticeSound();
-              addAlertMessage("⏳ Notice: A Labor Room bed has been empty for over 1 Hour.", "warning");
-            }
-          }, [currentTime, sessionStarted]);
+            // Firebase Listeners
+            React.useEffect(() => {
+                if(!started) return;
 
-          const sortedWaitlist = [...waitlist].sort((a, b) => {
-            const priorityA = TAG_PRIORITY[a.antenatalTag || 'White'];
-            const priorityB = TAG_PRIORITY[b.antenatalTag || 'White'];
-            if (priorityA !== priorityB) return priorityA - priorityB;
-            if ((b.cmiScore || 0) !== (a.cmiScore || 0)) return (b.cmiScore || 0) - (a.cmiScore || 0);
-            return a.addedAt - b.addedAt;
-          });
+                // Listen to Active Patients (Waitlist & LR)
+                const unsubActive = db.collection('patients').onSnapshot(snapshot => {
+                    const activeList = [];
+                    snapshot.forEach(doc => {
+                        activeList.push({ id: doc.id, ...doc.data() });
+                    });
+                    
+                    // Sorting Waitlist by Tag -> OB-CMI -> Wait Time
+                    activeList.sort((a, b) => {
+                        if (tagPriority[a.tag] !== tagPriority[b.tag]) return tagPriority[a.tag] - tagPriority[b.tag];
+                        if (b.obCmiScore !== a.obCmiScore) return b.obCmiScore - a.obCmiScore;
+                        return getValidDate(a.createdAt) - getValidDate(b.createdAt);
+                    });
+                    
+                    setPatients(activeList);
+                });
 
-          const handleAddPatient = (e) => {
-            e.preventDefault();
-            let cmiScore = 0;
-            formData.comorbidities.forEach(id => {
-              const condition = COMORBIDITIES.find(c => c.id === id);
-              if (condition) cmiScore += condition.points;
-            });
-            const newPatient = { id: crypto.randomUUID(), ...formData, cmiScore, addedAt: Date.now() };
-            setWaitlist([...waitlist, newPatient]);
-            setShowAddForm(false);
-            setFormData({ name: '', rn: '', location: 'Patient Assessment Centre (PAC)', gravida: '', para: '', dilation: '', antenatalTag: 'White', notes: '', comorbidities: [], highRiskCriteria: [] });
-          };
+                // Listen to Archived Patients (For Study)
+                const unsubArchive = db.collection('archives').orderBy('dischargedAt', 'desc').onSnapshot(snapshot => {
+                    const archList = [];
+                    snapshot.forEach(doc => archList.push({ id: doc.id, ...doc.data() }));
+                    setArchives(archList);
+                });
 
-          const admitPatient = (patient) => {
-            if (availableBeds <= 0) return;
-            setWaitlist(waitlist.filter(p => p.id !== patient.id));
-            setAdmitted([...admitted, { ...patient, admittedAt: Date.now(), acceptedAt: null }]);
-            setEmptyBedTimers(prev => {
-              const newArr = [...prev];
-              if (newArr.length > 0) newArr.shift();
-              return newArr;
-            });
-          };
+                return () => {
+                    unsubActive();
+                    unsubArchive();
+                }
+            }, [started]);
 
-          const acceptPatient = (patientId) => {
-            setAdmitted(admitted.map(p => p.id === patientId ? { ...p, acceptedAt: Date.now() } : p));
-          };
+            // Form Handlers
+            const handleInputChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
 
-          const dischargePatient = (patientId) => {
-            setAdmitted(admitted.filter(p => p.id !== patientId));
-            setEmptyBedTimers(prev => [...prev, { id: crypto.randomUUID(), emptySince: Date.now(), notified: false }]);
-          };
+            const toggleHighRisk = (item) => {
+                setFormData(prev => {
+                    const exists = prev.highRiskInfo.includes(item);
+                    return {
+                        ...prev,
+                        highRiskInfo: exists ? prev.highRiskInfo.filter(i => i !== item) : [...prev.highRiskInfo, item]
+                    };
+                });
+            };
 
-          const removePatient = (patientId) => {
-            setWaitlist(waitlist.filter(p => p.id !== patientId));
-          };
+            const toggleComorbidity = (points) => {
+                setFormData(prev => ({ ...prev, obCmiScore: prev.obCmiScore + points }));
+            };
 
-          const renderAlerts = () => (
-            <div className="fixed top-20 right-4 z-50 flex flex-col gap-3 pointer-events-none">
-              {alerts.map(a => (
-                <div key={a.id} className={`w-80 p-4 rounded-xl shadow-2xl flex items-start gap-3 border-l-4 animate-in slide-in-from-right fade-in duration-300 ${a.type === 'danger' ? 'bg-red-50 border-red-600 text-red-800' : a.type === 'success' ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-amber-50 border-amber-500 text-amber-800'}`}>
-                  <div className="flex-1 text-sm font-bold">{a.message}</div>
-                </div>
-              ))}
-            </div>
-          );
+            // Database Actions
+            const addPatient = async () => {
+                if (!formData.name || !formData.mrn) return alert("Please enter Name and MRN");
+                await db.collection('patients').add({
+                    ...formData,
+                    status: 'waiting',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                setFormData({ name: '', mrn: '', ward: 'PAC', tag: 'Green', obCmiScore: 0, highRiskInfo: [] });
+            };
 
-          const renderAddPatientForm = () => (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="bg-slate-800 text-white p-4 flex justify-between items-center shrink-0">
-                  <h2 className="text-xl font-bold flex items-center gap-2"><i className="fa-solid fa-plus w-5"></i> Add Patient to Waitlist</h2>
-                  <button onClick={() => setShowAddForm(false)} className="text-slate-300 hover:text-white"><i className="fa-solid fa-xmark text-2xl"></i></button>
-                </div>
-                <form onSubmit={handleAddPatient} className="p-4 overflow-y-auto flex-1">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-lg border-b pb-2">Patient Details</h3>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Patient Name</label>
-                        <input required type="text" value={formData.name} onChange={e => setFormData(prev => ({...prev, name: e.target.value}))} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500" placeholder="e.g. Jane Doe" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Reg No (RN)</label>
-                          <input required type="text" value={formData.rn} onChange={e => setFormData(prev => ({...prev, rn: e.target.value}))} className="w-full p-2 border rounded-lg" placeholder="RN-12345" />
+            const sendToLR = async (id) => {
+                const lrCount = patients.filter(p => p.status === 'pending_lr' || p.status === 'in_lr').length;
+                if (lrCount >= BED_CAPACITY) return alert("Labor Room is at full capacity (6 beds)!");
+                await db.collection('patients').doc(id).update({
+                    status: 'pending_lr',
+                    sentToLrAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            };
+
+            const acceptInLR = async (id) => {
+                await db.collection('patients').doc(id).update({
+                    status: 'in_lr',
+                    acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            };
+
+            const dischargePatient = async (patient) => {
+                const dischargeTime = firebase.firestore.FieldValue.serverTimestamp();
+                // Move to archives
+                await db.collection('archives').add({
+                    ...patient,
+                    dischargedAt: dischargeTime
+                });
+                // Remove from active
+                await db.collection('patients').doc(patient.id).delete();
+            };
+
+            if (!started) {
+                return (
+                    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-fuchsia-600 to-purple-800">
+                        <div className="bg-white p-10 rounded-2xl shadow-2xl text-center max-w-md w-full">
+                            <h1 className="text-3xl font-bold text-gray-800 mb-6">ActiveTOFully OBGYN HSIJB</h1>
+                            <p className="text-gray-600 mb-8">Click below to start shift and enable system alerts & database sync.</p>
+                            <button onClick={() => setStarted(true)} className="w-full bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-4 px-6 rounded-xl text-lg shadow-lg transform transition active:scale-95">
+                                Start Shift
+                            </button>
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Current Location</label>
-                          <select value={formData.location} onChange={e => setFormData(prev => ({...prev, location: e.target.value}))} className="w-full p-2 border rounded-lg bg-white">
-                            {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Gravida</label>
-                          <input required type="number" min="1" value={formData.gravida} onChange={e => setFormData(prev => ({...prev, gravida: e.target.value}))} className="w-full p-2 border rounded-lg" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Para</label>
-                          <input required type="number" min="0" value={formData.para} onChange={e => setFormData(prev => ({...prev, para: e.target.value}))} className="w-full p-2 border rounded-lg" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">OS (cm)</label>
-                          <input required type="number" min="0" max="10" value={formData.dilation} onChange={e => setFormData(prev => ({...prev, dilation: e.target.value}))} className="w-full p-2 border rounded-lg" placeholder="0-10" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">MOH Antenatal Tagging (Buku Pink)</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.entries(ANTENATAL_TAGS).map(([tag, styles]) => (
-                            <label key={tag} className={`flex items-center p-2 border rounded-lg cursor-pointer transition-colors ${formData.antenatalTag === tag ? 'ring-2 ring-offset-1 ring-slate-400 bg-slate-50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'}`}>
-                               <input type="radio" name="antenatalTag" value={tag} checked={formData.antenatalTag === tag} onChange={e => setFormData(prev => ({...prev, antenatalTag: e.target.value}))} className="hidden" />
-                               <div className={`w-3 h-3 rounded-full mr-2 shadow-sm ${styles.badge}`}></div>
-                               <span className="text-sm font-semibold text-gray-800">{tag} Tag</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Clinical Notes</label>
-                        <textarea value={formData.notes} onChange={e => setFormData(prev => ({...prev, notes: e.target.value}))} className="w-full p-2 border rounded-lg" rows="2" placeholder="Brief history or specific flags..."></textarea>
-                      </div>
                     </div>
-                    <div className="space-y-4">
-                      <div className="bg-red-50 p-3 rounded-xl border border-red-200">
-                        <div className="flex justify-between items-end border-b border-red-200 pb-2 mb-3">
-                          <h3 className="font-semibold text-lg text-red-700 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation"></i> High Risk Flags</h3>
+                );
+            }
+
+            const waitlist = patients.filter(p => p.status === 'waiting');
+            const lrPatients = patients.filter(p => p.status === 'pending_lr' || p.status === 'in_lr');
+            const overdueCount = waitlist.filter(p => (now - getValidDate(p.createdAt)) > 14400000).length;
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 md:p-6 font-sans">
+                    {/* HEADER */}
+                    <div className="bg-gradient-to-r from-violet-700 via-fuchsia-600 to-rose-500 rounded-2xl p-6 mb-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h1 className="text-3xl font-extrabold tracking-tight">ActiveTOFully OBGYN</h1>
+                            <p className="text-fuchsia-100 font-medium">Hospital Sultan Ismail Johor Bahru</p>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {HIGH_RISK_CRITERIA.map((criteria) => (
-                            <label key={criteria.id} className="flex items-start p-2 hover:bg-red-100/50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-red-200">
-                              <input 
-                                type="checkbox" 
-                                className="mt-1 mr-2 rounded border-red-300 text-red-600 focus:ring-red-500"
-                                checked={formData.highRiskCriteria.includes(criteria.id)}
-                                onChange={() => {
-                                  setFormData(prev => {
-                                    const current = prev.highRiskCriteria;
-                                    return { ...prev, highRiskCriteria: current.includes(criteria.id) ? current.filter(id => id !== criteria.id) : [...current, criteria.id] };
-                                  });
-                                }}
-                              />
-                              <span className="text-sm font-medium text-red-900">{criteria.label}</span>
-                            </label>
-                          ))}
+                        <div className="text-right">
+                            <p className="text-2xl font-bold">{now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            <p className="text-sm font-medium text-fuchsia-100">{now.toLocaleDateString('en-MY', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                         </div>
-                      </div>
-                      <div className="flex justify-between items-end border-b pb-2 mt-4">
-                        <h3 className="font-semibold text-lg">Maternal Comorbidities</h3>
-                        <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">OB-CMI Index</span>
-                      </div>
-                      <div className="max-h-[400px] overflow-y-auto pr-2 space-y-1">
-                        {COMORBIDITIES.map((comorbidity) => (
-                          <label key={comorbidity.id} className="flex items-start p-2 hover:bg-slate-50 rounded cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-                            <input 
-                              type="checkbox" 
-                              className="mt-1 mr-3 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                              checked={formData.comorbidities.includes(comorbidity.id)}
-                              onChange={() => {
-                                 setFormData(prev => {
-                                   const current = prev.comorbidities;
-                                   return { ...prev, comorbidities: current.includes(comorbidity.id) ? current.filter(id => id !== comorbidity.id) : [...current, comorbidity.id] };
-                                 });
-                              }}
-                            />
-                            <div className="flex-1 flex justify-between items-start gap-2">
-                              <span className="text-sm text-gray-700">{comorbidity.label}</span>
-                              <span className="text-xs font-bold text-slate-400 shrink-0">+{comorbidity.points} pts</span>
+                    </div>
+
+                    {/* DASHBOARD */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+                        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 flex flex-col items-center">
+                            <span className="text-gray-500 text-sm font-bold">Waitlist</span>
+                            <span className="text-4xl font-extrabold text-violet-700">{waitlist.length}</span>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 flex flex-col items-center">
+                            <span className="text-gray-500 text-sm font-bold">LR Beds Occupied</span>
+                            <span className="text-4xl font-extrabold text-blue-600">{lrPatients.length}/{BED_CAPACITY}</span>
+                        </div>
+                        <div className={`p-4 rounded-xl shadow border flex flex-col items-center ${overdueCount > 0 ? 'animate-blink' : 'bg-white border-gray-100'}`}>
+                            <span className={`text-sm font-bold ${overdueCount > 0 ? 'text-white' : 'text-gray-500'}`}>Overdue >4 Hrs</span>
+                            <span className={`text-4xl font-extrabold ${overdueCount > 0 ? 'text-white' : 'text-red-600'}`}>{overdueCount}</span>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 flex flex-col items-center justify-between">
+                            <span className="text-gray-500 text-sm font-bold">Doctors</span>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setDoctorsOnDuty(d=>Math.max(0,d-1))} className="w-8 h-8 rounded-full bg-gray-100 font-bold">-</button>
+                                <span className="text-2xl font-extrabold">{doctorsOnDuty}</span>
+                                <button onClick={() => setDoctorsOnDuty(d=>d+1)} className="w-8 h-8 rounded-full bg-gray-100 font-bold">+</button>
                             </div>
-                          </label>
-                        ))}
-                      </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-xl shadow border border-gray-100 flex flex-col items-center justify-between">
+                            <span className="text-gray-500 text-sm font-bold">Nurses</span>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setNursesOnDuty(d=>Math.max(0,d-1))} className="w-8 h-8 rounded-full bg-gray-100 font-bold">-</button>
+                                <span className="text-2xl font-extrabold">{nursesOnDuty}</span>
+                                <button onClick={() => setNursesOnDuty(d=>d+1)} className="w-8 h-8 rounded-full bg-gray-100 font-bold">+</button>
+                            </div>
+                        </div>
                     </div>
-                  </div>
-                  <div className="mt-6 pt-4 border-t">
-                    <button type="submit" className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-colors">
-                      Add to Waitlist
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          );
 
-          const renderPatientTable = (patients, isWaitlist) => {
-            if (patients.length === 0) {
-              return (
-                <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-                  {isWaitlist ? <i className="fa-solid fa-user text-5xl text-gray-300 mb-3 block"></i> : <i className="fa-solid fa-bed text-5xl text-gray-300 mb-3 block"></i>}
-                  <h3 className="text-lg font-semibold text-gray-700">{isWaitlist ? 'No patients waiting' : 'Labor Room is empty'}</h3>
-                  <p className="text-gray-500 mt-1">{isWaitlist ? 'Add patients from PAC or Ward to track them here.' : `All ${MAX_BEDS} beds are currently available.`}</p>
-                </div>
-              );
-            }
-            return (
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[850px]">
-                    <thead>
-                      <tr className="bg-slate-800 text-white text-sm">
-                        <th className="p-4 font-semibold w-1/4">Patient Details</th>
-                        <th className="p-4 font-semibold w-1/5">Location & OS</th>
-                        <th className="p-4 font-semibold w-1/4">Risk Profile</th>
-                        <th className="p-4 font-semibold w-1/6">Duration</th>
-                        <th className="p-4 font-semibold text-right w-32">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {patients.map(patient => {
-                        const tagInfo = ANTENATAL_TAGS[patient.antenatalTag || 'White'];
-                        const waitTimeMs = currentTime - patient.addedAt;
-                        const isOverdue = waitTimeMs >= FOUR_HOURS_MS && isWaitlist;
-                        const patientComorbidities = patient.comorbidities ? patient.comorbidities.map(id => COMORBIDITIES.find(c => c.id === id)).filter(Boolean) : [];
-                        const patientHighRisk = patient.highRiskCriteria ? patient.highRiskCriteria.map(id => HIGH_RISK_CRITERIA.find(c => c.id === id)).filter(Boolean) : [];
+                    {/* TABS */}
+                    <div className="flex gap-2 mb-6 border-b pb-2 overflow-x-auto">
+                        <button onClick={()=>setActiveTab('waitlist')} className={`px-6 py-2 rounded-full font-bold whitespace-nowrap ${activeTab === 'waitlist' ? 'bg-violet-600 text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>Waitlist & Registration</button>
+                        <button onClick={()=>setActiveTab('lr')} className={`px-6 py-2 rounded-full font-bold whitespace-nowrap ${activeTab === 'lr' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>Labor Room ({lrPatients.length})</button>
+                        <button onClick={()=>setActiveTab('history')} className={`px-6 py-2 rounded-full font-bold whitespace-nowrap ${activeTab === 'history' ? 'bg-teal-600 text-white shadow-md' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>Study / History Data</button>
+                    </div>
 
-                        return (
-                          <tr key={patient.id} className={`${tagInfo.bg} hover:bg-slate-100 transition-colors border-l-[4px] ${isOverdue ? 'border-l-red-600' : 'border-l-transparent'}`}>
-                            <td className="p-4 align-top">
-                              <div className="font-bold text-gray-900 text-base">{patient.name}</div>
-                              <div className="text-sm text-gray-600 mb-1">RN: {patient.rn}</div>
-                              <div className="text-sm font-medium text-slate-700 mb-2">G{patient.gravida}P{patient.para}</div>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold shadow-sm ${tagInfo.badge}`}>
-                                {tagInfo.label.split(' ')[0]} Tag
-                              </span>
-                            </td>
-                            <td className="p-4 align-top">
-                              <div className="flex items-center gap-1.5 text-sm text-gray-700 mb-1"><i className="fa-solid fa-location-dot text-gray-400"></i> {patient.location}</div>
-                              <div className="flex items-center gap-1.5 text-sm text-gray-700"><i className="fa-solid fa-wave-square text-gray-400"></i> OS: <span className="font-bold text-black">{patient.dilation} cm</span></div>
-                            </td>
-                            <td className="p-4 align-top">
-                              {patientHighRisk.length > 0 && (
-                                <div className="inline-flex items-center gap-1.5 text-sm font-extrabold px-3 py-1.5 rounded-lg bg-yellow-400 text-black mb-2 uppercase tracking-wide shadow-sm w-full animate-warning-blink">
-                                   <i className="fa-solid fa-triangle-exclamation"></i> HIGH RISK ALERTS
+                    {/* CONTENT AREA */}
+                    {activeTab === 'waitlist' && (
+                        <div className="grid md:grid-cols-3 gap-6">
+                            {/* FORM */}
+                            <div className="md:col-span-1 bg-white p-5 rounded-xl shadow border border-gray-200 h-fit">
+                                <h3 className="text-lg font-bold mb-4 border-b pb-2">Register Patient</h3>
+                                
+                                <div className="space-y-3">
+                                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder="Patient Name" className="w-full p-2 border rounded font-medium focus:outline-fuchsia-500" />
+                                    <input type="text" name="mrn" value={formData.mrn} onChange={handleInputChange} placeholder="MRN / IC No." className="w-full p-2 border rounded font-medium focus:outline-fuchsia-500" />
+                                    
+                                    <div className="flex gap-2">
+                                        <select name="ward" value={formData.ward} onChange={handleInputChange} className="flex-1 p-2 border rounded font-bold bg-gray-50">
+                                            <option value="PAC">PAC</option>
+                                            <option value="Ward 4A">Ward 4A</option>
+                                            <option value="Ward 4B">Ward 4B</option>
+                                        </select>
+                                        <select name="tag" value={formData.tag} onChange={handleInputChange} className="flex-1 p-2 border rounded font-bold bg-gray-50">
+                                            <option value="Red" className="text-red-600">Red Tag</option>
+                                            <option value="Yellow" className="text-yellow-600">Yellow Tag</option>
+                                            <option value="Green" className="text-green-600">Green Tag</option>
+                                            <option value="White">White Tag</option>
+                                        </select>
+                                    </div>
+
+                                    {/* High Risk Alerts */}
+                                    <div className="pt-2">
+                                        <label className="text-xs font-bold text-red-600 mb-1 block">HIGH RISK CRITERIA (Select all that apply)</label>
+                                        <div className="grid grid-cols-2 gap-1 text-xs">
+                                            {["1 Previous CS", "H/O Myomectomy", "Grandmultipara", "H/O PPH", "Previous Laparotomy", "Shoulder Dystocia", "Baby > 3.9kg", "H/O pre/eclampsia"].map(item => (
+                                                <label key={item} className="flex items-center gap-1 p-1 bg-gray-50 rounded border cursor-pointer hover:bg-gray-100">
+                                                    <input type="checkbox" checked={formData.highRiskInfo.includes(item)} onChange={() => toggleHighRisk(item)} className="accent-red-600" /> {item}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <button onClick={addPatient} className="w-full mt-4 bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold py-3 px-4 rounded shadow">Add to Waitlist</button>
                                 </div>
-                              )}
-                              {patient.cmiScore > 0 && (
-                                <div className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded border border-red-200 mb-2">
-                                  <i className="fa-solid fa-heart-pulse"></i> OB-CMI: {patient.cmiScore}
-                                </div>
-                              )}
-                              {patientHighRisk.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mb-2">
-                                  {patientHighRisk.map(c => (
-                                    <span key={c.id} className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-800 border border-red-200 shadow-sm uppercase"><i className="fa-solid fa-triangle-exclamation mr-1"></i> {c.label}</span>
-                                  ))}
-                                </div>
-                              )}
-                              {patientComorbidities.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mb-2">
-                                  {patientComorbidities.map(c => (
-                                    <span key={c.id} className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 border border-slate-300">{c.label}</span>
-                                  ))}
-                                </div>
-                              )}
-                              {patient.notes && (<div className="text-xs text-gray-600 italic mt-1 bg-white/60 p-1.5 rounded border border-gray-200">"{patient.notes}"</div>)}
-                            </td>
-                            <td className="p-4 align-top">
-                               {isWaitlist ? (
-                                 <>
-                                   {isOverdue && (
-                                     <div className="inline-flex items-center justify-center gap-1.5 text-base font-black px-3 py-2 rounded-lg border-2 mb-2 animate-urgent-blink uppercase tracking-widest shadow-lg w-full text-center">
-                                       <i className="fa-solid fa-triangle-exclamation"></i> OVERDUE
-                                     </div>
-                                   )}
-                                   <div className={`flex items-center gap-1.5 font-bold ${isOverdue ? 'animate-urgent-blink text-lg px-2 py-1 rounded shadow' : 'text-slate-700 text-sm'}`}>
-                                     <i className="fa-solid fa-clock"></i> {formatWaitTime(patient.addedAt, currentTime)}
-                                   </div>
-                                   <div className="text-xs text-slate-500 mt-1 font-medium">Total Wait Time</div>
-                                 </>
-                               ) : (
-                                 patient.acceptedAt ? (
-                                   <>
-                                     <div className="flex items-center gap-1.5 font-bold text-slate-700 text-sm">
-                                       <i className="fa-solid fa-clock"></i> {formatWaitTime(patient.acceptedAt, currentTime)}
-                                     </div>
-                                     <div className="text-xs text-slate-500 mt-1 font-medium">Time in LR</div>
-                                   </>
-                                 ) : (
-                                   <>
-                                     <div className="flex items-center gap-1.5 font-bold text-amber-600 text-sm animate-pulse">
-                                       <i className="fa-solid fa-clock"></i> Pending
-                                     </div>
-                                     <div className="text-xs text-amber-600/80 mt-1 font-medium">Awaiting Acceptance</div>
-                                   </>
-                                 )
-                               )}
-                            </td>
-                            <td className="p-4 align-top text-right">
-                              <div className="flex flex-col items-end gap-2">
-                                {isWaitlist ? (
-                                  <>
-                                    <button onClick={() => admitPatient(patient)} disabled={availableBeds <= 0} className={`w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg font-bold text-sm shadow-sm transition-all ${availableBeds > 0 ? 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-purple-500/30' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
-                                      SEND TO LR <i className="fa-solid fa-arrow-right text-xs"></i>
-                                    </button>
-                                    <button onClick={() => removePatient(patient.id)} className="w-full px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg transition-colors">Remove</button>
-                                  </>
-                                ) : (
-                                  !patient.acceptedAt ? (
-                                    <button onClick={() => acceptPatient(patient.id)} className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-bold text-sm shadow-sm transition-colors border border-blue-700">
-                                      <i className="fa-solid fa-circle-check"></i> ACCEPT
-                                    </button>
-                                  ) : (
-                                    <button onClick={() => dischargePatient(patient.id)} className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-bold text-sm shadow-sm transition-colors border border-green-300">
-                                      <i className="fa-solid fa-circle-check"></i> Discharge
-                                    </button>
-                                  )
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </div>
+
+                            {/* WAITLIST TABLE */}
+                            <div className="md:col-span-2 overflow-x-auto bg-white rounded-xl shadow border border-gray-200">
+                                <table className="w-full text-left border-collapse min-w-[700px]">
+                                    <thead>
+                                        <tr className="bg-gray-100 text-gray-700 text-sm">
+                                            <th className="p-3">Antenatal Tag</th>
+                                            <th className="p-3">Patient Details</th>
+                                            <th className="p-3">Location</th>
+                                            <th className="p-3">Wait Duration</th>
+                                            <th className="p-3">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {waitlist.length === 0 ? <tr><td colSpan="5" className="p-6 text-center text-gray-400 font-bold">No patients in waitlist.</td></tr> : null}
+                                        {waitlist.map(p => {
+                                            const waitMs = now - getValidDate(p.createdAt);
+                                            const isOverdue = waitMs > 14400000;
+                                            
+                                            return (
+                                                <tr key={p.id} className={`tag-${p.tag.toLowerCase()} bg-opacity-30 transition-colors`}>
+                                                    <td className="p-3">
+                                                        <span className={`px-3 py-1 rounded-full text-xs font-extrabold uppercase border border-current ${p.tag === 'Red' ? 'text-red-700 bg-red-100' : p.tag === 'Yellow' ? 'text-yellow-700 bg-yellow-100' : p.tag === 'Green' ? 'text-green-700 bg-green-100' : 'text-gray-700 bg-white'}`}>
+                                                            {p.tag}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <div className="font-bold text-gray-900 text-lg">{p.name}</div>
+                                                        <div className="text-xs text-gray-500 font-mono mb-1">MRN: {p.mrn}</div>
+                                                        {p.highRiskInfo.length > 0 && (
+                                                            <div className="text-xs font-bold px-2 py-1 rounded animate-warning-blink border border-black inline-block mt-1">
+                                                                ⚠️ HIGH RISK: {p.highRiskInfo.join(', ')}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-3 font-bold text-gray-700">{p.ward}</td>
+                                                    <td className="p-3">
+                                                        {isOverdue ? (
+                                                            <div className="text-white font-bold px-3 py-1 rounded animate-blink text-center text-sm shadow">
+                                                                >4 Hrs Overdue<br/><span className="text-xs">{formatDuration(waitMs)}</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-gray-800 font-bold">{formatDuration(waitMs)}</div>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <button onClick={() => sendToLR(p.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded text-sm shadow w-full whitespace-nowrap">
+                                                            SEND TO LR
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* LABOUR ROOM TAB */}
+                    {activeTab === 'lr' && (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {lrPatients.length === 0 ? <div className="col-span-full text-center p-10 text-gray-400 font-bold bg-white rounded-xl shadow border">Labor Room is currently empty.</div> : null}
+                            {lrPatients.map((p, index) => {
+                                const isPending = p.status === 'pending_lr';
+                                const duration = isPending ? (now - getValidDate(p.sentToLrAt)) : (now - getValidDate(p.acceptedAt));
+
+                                return (
+                                    <div key={p.id} className={`p-5 rounded-xl shadow-lg border-2 ${isPending ? 'border-orange-400 bg-orange-50' : 'border-blue-400 bg-blue-50'}`}>
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className="px-2 py-1 bg-white rounded text-xs font-bold shadow text-gray-700">Bed {index + 1}</span>
+                                            {isPending ? (
+                                                <span className="px-2 py-1 bg-orange-200 text-orange-800 rounded text-xs font-bold animate-pulse border border-orange-400">Arriving / Pending</span>
+                                            ) : (
+                                                <span className="px-2 py-1 bg-blue-200 text-blue-800 rounded text-xs font-bold border border-blue-400">Admitted</span>
+                                            )}
+                                        </div>
+                                        <h3 className="font-bold text-xl text-gray-900">{p.name}</h3>
+                                        <p className="text-sm text-gray-500 font-mono mb-4">MRN: {p.mrn} | From: {p.ward}</p>
+                                        
+                                        <div className="bg-white p-3 rounded mt-2 border flex justify-between items-center mb-4">
+                                            <span className="text-xs font-bold text-gray-500">{isPending ? 'Transfer Time' : 'Time in LR'}</span>
+                                            <span className="font-mono font-bold text-lg">{formatDuration(duration)}</span>
+                                        </div>
+
+                                        {isPending ? (
+                                            <button onClick={() => acceptInLR(p.id)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded shadow mt-auto">ACCEPT PATIENT</button>
+                                        ) : (
+                                            <button onClick={() => dischargePatient(p)} className="w-full bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 px-4 rounded shadow mt-auto">Discharge / Postnatal</button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* STUDY / HISTORY TAB (FOR RESEARCH/AUDIT) */}
+                    {activeTab === 'history' && (
+                        <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+                            <div className="p-4 bg-teal-600 text-white">
+                                <h2 className="font-bold text-lg">Patient Flow Data (For Clinical Audit)</h2>
+                                <p className="text-xs text-teal-100">Durations are calculated automatically based on real-time timestamps.</p>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse text-sm min-w-[900px]">
+                                    <thead>
+                                        <tr className="bg-gray-100 text-gray-700">
+                                            <th className="p-3 border-b">Name / MRN</th>
+                                            <th className="p-3 border-b">Tag & Ward</th>
+                                            <th className="p-3 border-b">Registered At</th>
+                                            <th className="p-3 border-b">Accepted LR At</th>
+                                            <th className="p-3 border-b">Discharged At</th>
+                                            <th className="p-3 border-b bg-yellow-50 text-center">Waitlist Duration</th>
+                                            <th className="p-3 border-b bg-blue-50 text-center">Labour Room Duration</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {archives.length === 0 ? <tr><td colSpan="7" className="p-6 text-center text-gray-400 font-bold">No historical data found yet.</td></tr> : null}
+                                        {archives.map(p => {
+                                            const created = getValidDate(p.createdAt);
+                                            const accepted = getValidDate(p.acceptedAt);
+                                            const discharged = getValidDate(p.dischargedAt);
+                                            
+                                            // Calculate study durations
+                                            const waitDurationMs = accepted && created ? (accepted - created) : 0;
+                                            const lrDurationMs = discharged && accepted ? (discharged - accepted) : 0;
+
+                                            return (
+                                                <tr key={p.id} className="hover:bg-gray-50">
+                                                    <td className="p-3 font-medium text-gray-900">{p.name}<br/><span className="text-xs text-gray-500">{p.mrn}</span></td>
+                                                    <td className="p-3"><span className={`px-2 py-0.5 rounded text-xs font-bold bg-gray-200`}>{p.tag}</span><br/><span className="text-xs">{p.ward}</span></td>
+                                                    <td className="p-3 text-gray-600">{created.toLocaleDateString()}<br/><b>{formatTimeOnly(created)}</b></td>
+                                                    <td className="p-3 text-gray-600">{accepted ? <>{accepted.toLocaleDateString()}<br/><b>{formatTimeOnly(accepted)}</b></> : '-'}</td>
+                                                    <td className="p-3 text-gray-600">{discharged ? <>{discharged.toLocaleDateString()}<br/><b>{formatTimeOnly(discharged)}</b></> : '-'}</td>
+                                                    <td className="p-3 bg-yellow-50 font-mono text-center font-bold text-yellow-800">{formatDuration(waitDurationMs)}</td>
+                                                    <td className="p-3 bg-blue-50 font-mono text-center font-bold text-blue-800">{formatDuration(lrDurationMs)}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
-              </div>
             );
-          };
-
-          if (!sessionStarted) {
-            return (
-              <div className="min-h-screen flex items-center justify-center p-4">
-                 <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl p-8 text-center border">
-                    <i className="fa-solid fa-bell text-5xl text-fuchsia-600 mb-6 block animate-bounce"></i>
-                    <h1 className="text-2xl font-extrabold text-slate-900 mb-2">ActiveTOFully OBGYN HSIJB</h1>
-                    <p className="text-slate-600 mb-8">Click below to initialize the dashboard and enable audio system alarms for overdue patients and bed availability.</p>
-                    <button onClick={handleStartSession} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-transform hover:scale-105 active:scale-95 text-lg">
-                      Start Shift & Enable Alarms
-                    </button>
-                 </div>
-              </div>
-            );
-          }
-
-          return (
-            <div className="pb-20 md:pb-0">
-              {renderAlerts()}
-              
-              <header className="bg-gradient-to-r from-violet-700 via-fuchsia-600 to-rose-500 text-white sticky top-0 z-40 shadow-lg">
-                <div className="max-w-6xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h1 className="text-xl md:text-2xl font-extrabold tracking-tight drop-shadow-sm">ActiveTOFully OBGYN HSIJB</h1>
-                      <p className="text-pink-100 text-sm font-medium opacity-90">Active Phase Management Dashboard</p>
-                    </div>
-                  </div>
-                </div>
-              </header>
-
-              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <div className="col-span-2 md:col-span-5 flex justify-between items-center bg-white rounded-xl shadow-sm border border-slate-200 p-3">
-                     <div className="flex items-center gap-2 text-slate-600">
-                       <i className="fa-solid fa-calendar-days"></i>
-                       <span className="font-medium text-sm md:text-base">{new Date(currentTime).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                     </div>
-                     <div className="flex items-center gap-2 text-slate-900">
-                       <i className="fa-solid fa-clock text-purple-600"></i>
-                       <span className="font-bold text-lg">{new Date(currentTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
-                     </div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex flex-col justify-center border-l-[4px] border-l-yellow-400">
-                    <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1">Waiting List</span>
-                    <span className="text-2xl font-bold text-slate-800">{waitlist.length} <span className="text-sm font-normal text-slate-400">active</span></span>
-                  </div>
-                  <div className={`rounded-xl shadow-sm border p-3 flex flex-col justify-center transition-all duration-300 ${overdueCount > 0 ? 'animate-urgent-blink border-red-600' : 'bg-white border-slate-200 border-l-[4px] border-l-red-100'}`}>
-                     <div className="flex justify-between items-center mb-1">
-                        <span className={`text-xs font-semibold uppercase tracking-wider ${overdueCount > 0 ? 'text-white' : 'text-slate-500'}`}>Overdue &gt; 4 Hrs</span>
-                        <i className={`fa-solid fa-triangle-exclamation ${overdueCount > 0 ? 'text-white' : 'text-red-500'}`}></i>
-                     </div>
-                     <span className={`text-2xl font-bold ${overdueCount > 0 ? 'text-white' : 'text-slate-800'}`}>{overdueCount}</span>
-                  </div>
-                  <div className={`bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex flex-col justify-center border-l-[4px] ${availableBeds > 0 ? 'border-l-green-400' : 'border-l-red-500'}`}>
-                    <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1">Free LR Beds</span>
-                    <span className="text-2xl font-bold text-slate-800">{availableBeds} <span className="text-sm font-normal text-slate-400">/ {MAX_BEDS}</span></span>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex flex-col justify-center">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Doctors On Duty</span>
-                      <i className="fa-solid fa-stethoscope text-violet-500"></i>
-                    </div>
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-2xl font-bold text-slate-800">{doctorsCount}</span>
-                      <div className="flex bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                         <button onClick={() => setDoctorsCount(Math.max(0, doctorsCount - 1))} className="px-2.5 py-1 hover:bg-slate-200 text-slate-600 font-bold active:bg-slate-300">-</button>
-                         <button onClick={() => setDoctorsCount(doctorsCount + 1)} className="px-2.5 py-1 hover:bg-slate-200 text-slate-600 font-bold border-l border-slate-200 active:bg-slate-300">+</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex flex-col justify-center">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Nurses On Duty</span>
-                      <i className="fa-solid fa-users text-rose-500"></i>
-                    </div>
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-2xl font-bold text-slate-800">{nursesCount}</span>
-                      <div className="flex bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                         <button onClick={() => setNursesCount(Math.max(0, nursesCount - 1))} className="px-2.5 py-1 hover:bg-slate-200 text-slate-600 font-bold active:bg-slate-300">-</button>
-                         <button onClick={() => setNursesCount(nursesCount + 1)} className="px-2.5 py-1 hover:bg-slate-200 text-slate-600 font-bold border-l border-slate-200 active:bg-slate-300">+</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 my-4">
-                <div className="flex bg-gray-200 p-1 rounded-xl">
-                  <button 
-                    onClick={() => setActiveTab('waitlist')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-all ${activeTab === 'waitlist' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                  >
-                    <i className="fa-solid fa-clipboard-list"></i> Waitlist 
-                    {waitlist.length > 0 && <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full ml-1 shadow-sm">{waitlist.length}</span>}
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('laborRoom')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-all ${activeTab === 'laborRoom' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                  >
-                    <i className="fa-solid fa-bed"></i> Labor Room
-                    <span className={`text-xs px-2 py-0.5 rounded-full ml-1 ${admitted.length === MAX_BEDS ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                      {admitted.length}/{MAX_BEDS}
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-                {activeTab === 'waitlist' && (<div className="animate-in fade-in duration-300">{renderPatientTable(sortedWaitlist, true)}</div>)}
-                {activeTab === 'laborRoom' && (<div className="animate-in fade-in duration-300">{renderPatientTable(admitted, false)}</div>)}
-              </main>
-
-              <div className="fixed bottom-6 right-6 z-40 md:static md:mt-8 md:max-w-6xl md:mx-auto md:px-8">
-                <button 
-                  onClick={() => setShowAddForm(true)}
-                  className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-full md:rounded-xl p-4 md:py-3 md:px-6 shadow-lg shadow-fuchsia-500/40 flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 w-14 h-14 md:w-full md:h-auto border border-white/20"
-                >
-                  <i className="fa-solid fa-plus text-xl md:hidden"></i>
-                  <span className="hidden md:flex font-bold items-center gap-2"><i className="fa-solid fa-plus"></i> Add New Patient to Waitlist</span>
-                </button>
-              </div>
-
-              {showAddForm && renderAddPatientForm()}
-            </div>
-          );
-        }
+        };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
