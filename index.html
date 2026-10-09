@@ -115,7 +115,7 @@
           const diffMs = currentTime - startTime;
           const hours = Math.floor(diffMs / (1000 * 60 * 60));
           const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-          return `${hours}h${minutes}m`;
+          return hours + "h " + minutes + "m";
         };
 
         // Audio System
@@ -326,7 +326,7 @@
           const renderAlerts = () => (
             <div className="fixed top-20 right-4 z-50 flex flex-col gap-3 pointer-events-none">
               {alerts.map(a => (
-                <div key={a.id} className={`w-80 p-4 rounded-xl shadow-2xl flex items-start gap-3 border-l-4 animate-in slide-in-from-right fade-in duration-300 ${a.type === 'danger' ? 'bg-red-50 border-red-600 text-red-800' : a.type === 'success' ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-amber-50 border-amber-500 text-amber-800'}`}>
+                <div key={a.id} className={"w-80 p-4 rounded-xl shadow-2xl flex items-start gap-3 border-l-4 animate-in slide-in-from-right fade-in duration-300 " + (a.type === 'danger' ? 'bg-red-50 border-red-600 text-red-800' : a.type === 'success' ? 'bg-emerald-50 border-emerald-500 text-emerald-800' : 'bg-amber-50 border-amber-500 text-amber-800')}>
                   <div className="flex-1 text-sm font-bold">{a.message}</div>
                 </div>
               ))}
@@ -378,9 +378,9 @@
                         <label className="block text-sm font-medium text-gray-700 mb-1">MOH Antenatal Tagging (Buku Pink)</label>
                         <div className="grid grid-cols-2 gap-2">
                           {Object.entries(ANTENATAL_TAGS).map(([tag, styles]) => (
-                            <label key={tag} className={`flex items-center p-2 border rounded-lg cursor-pointer transition-colors ${formData.antenatalTag === tag ? 'ring-2 ring-offset-1 ring-slate-400 bg-slate-50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'}`}>
+                            <label key={tag} className={"flex items-center p-2 border rounded-lg cursor-pointer transition-colors " + (formData.antenatalTag === tag ? 'ring-2 ring-offset-1 ring-slate-400 bg-slate-50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200')}>
                                <input type="radio" name="antenatalTag" value={tag} checked={formData.antenatalTag === tag} onChange={e => setFormData(prev => ({...prev, antenatalTag: e.target.value}))} className="hidden" />
-                               <div className={`w-3 h-3 rounded-full mr-2 shadow-sm ${styles.badge}`}></div>
+                               <div className={"w-3 h-3 rounded-full mr-2 shadow-sm " + styles.badge}></div>
                                <span className="text-sm font-semibold text-gray-800">{tag} Tag</span>
                             </label>
                           ))}
@@ -484,12 +484,12 @@
                         const patientHighRisk = patient.highRiskCriteria ? patient.highRiskCriteria.map(id => HIGH_RISK_CRITERIA.find(c => c.id === id)).filter(Boolean) : [];
 
                         return (
-                          <tr key={patient.id} className={`${tagInfo.bg} hover:bg-slate-100 transition-colors border-l-[4px]${isOverdue ? 'border-l-red-600' : 'border-l-transparent'}`}>
+                          <tr key={patient.id} className={tagInfo.bg + " hover:bg-slate-100 transition-colors border-l-[4px] " + (isOverdue ? 'border-l-red-600' : 'border-l-transparent')}>
                             <td className="p-4 align-top">
                               <div className="font-bold text-gray-900 text-base">{patient.name}</div>
                               <div className="text-sm text-gray-600 mb-1">RN: {patient.rn}</div>
                               <div className="text-sm font-medium text-slate-700 mb-2">G{patient.gravida}P{patient.para}</div>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold shadow-sm ${tagInfo.badge}`}>
+                              <span className={"inline-flex items-center px-2 py-0.5 rounded text-xs font-bold shadow-sm " + tagInfo.badge}>
                                 {tagInfo.label.split(' ')[0]} Tag
                               </span>
                             </td>
@@ -532,7 +532,7 @@
                                        <i className="fa-solid fa-triangle-exclamation"></i> OVERDUE
                                      </div>
                                    )}
-                                   <div className={`flex items-center gap-1.5 font-bold ${isOverdue ? 'animate-urgent-blink text-lg px-2 py-1 rounded shadow' : 'text-slate-700 text-sm'}`}>
+                                   <div className={"flex items-center gap-1.5 font-bold " + (isOverdue ? 'animate-urgent-blink text-lg px-2 py-1 rounded shadow' : 'text-slate-700 text-sm')}>
                                      <i className="fa-solid fa-clock"></i> {formatWaitTime(patient.addedAt, currentTime)}
                                    </div>
                                    <div className="text-xs text-slate-500 mt-1 font-medium">Total Wait Time</div>
@@ -559,7 +559,7 @@
                               <div className="flex flex-col items-end gap-2">
                                 {isWaitlist ? (
                                   <>
-                                    <button onClick={() => admitPatient(patient)} disabled={availableBeds <= 0} className={`w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg font-bold text-sm shadow-sm transition-all ${availableBeds > 0 ? 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-purple-500/30' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                                    <button onClick={() => admitPatient(patient)} disabled={availableBeds <= 0} className={"w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg font-bold text-sm shadow-sm transition-all " + (availableBeds > 0 ? 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-purple-500/30' : 'bg-gray-200 text-gray-400 cursor-not-allowed')}>
                                       SEND TO LR <i className="fa-solid fa-arrow-right text-xs"></i>
                                     </button>
                                     <button onClick={() => removePatient(patient.id)} className="w-full px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg transition-colors">Remove</button>
@@ -633,14 +633,14 @@
                     <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1">Waiting List</span>
                     <span className="text-2xl font-bold text-slate-800">{waitlist.length} <span className="text-sm font-normal text-slate-400">active</span></span>
                   </div>
-                  <div className={`rounded-xl shadow-sm border p-3 flex flex-col justify-center transition-all duration-300 ${overdueCount > 0 ? 'animate-urgent-blink border-red-600' : 'bg-white border-slate-200 border-l-[4px] border-l-red-100'}`}>
+                  <div className={"rounded-xl shadow-sm border p-3 flex flex-col justify-center transition-all duration-300 " + (overdueCount > 0 ? 'animate-urgent-blink border-red-600' : 'bg-white border-slate-200 border-l-[4px] border-l-red-100')}>
                      <div className="flex justify-between items-center mb-1">
-                        <span className={`text-xs font-semibold uppercase tracking-wider ${overdueCount > 0 ? 'text-white' : 'text-slate-500'}`}>Overdue &gt; 4 Hrs</span>
-                        <i className={`fa-solid fa-triangle-exclamation ${overdueCount > 0 ? 'text-white' : 'text-red-500'}`}></i>
+                        <span className={"text-xs font-semibold uppercase tracking-wider " + (overdueCount > 0 ? 'text-white' : 'text-slate-500')}>Overdue &gt; 4 Hrs</span>
+                        <i className={"fa-solid fa-triangle-exclamation " + (overdueCount > 0 ? 'text-white' : 'text-red-500')}></i>
                      </div>
-                     <span className={`text-2xl font-bold ${overdueCount > 0 ? 'text-white' : 'text-slate-800'}`}>{overdueCount}</span>
+                     <span className={"text-2xl font-bold " + (overdueCount > 0 ? 'text-white' : 'text-slate-800')}>{overdueCount}</span>
                   </div>
-                  <div className={`bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex flex-col justify-center border-l-[4px] ${availableBeds > 0 ? 'border-l-green-400' : 'border-l-red-500'}`}>
+                  <div className={"bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex flex-col justify-center border-l-[4px] " + (availableBeds > 0 ? 'border-l-green-400' : 'border-l-red-500')}>
                     <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-1">Free LR Beds</span>
                     <span className="text-2xl font-bold text-slate-800">{availableBeds} <span className="text-sm font-normal text-slate-400">/ {MAX_BEDS}</span></span>
                   </div>
@@ -677,4 +677,45 @@
                 <div className="flex bg-gray-200 p-1 rounded-xl">
                   <button 
                     onClick={() => setActiveTab('waitlist')}
-                    className={`flex-1 flex
+                    className={"flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-all " + (activeTab === 'waitlist' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+                  >
+                    <i className="fa-solid fa-clipboard-list"></i> Waitlist 
+                    {waitlist.length > 0 && <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full ml-1 shadow-sm">{waitlist.length}</span>}
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('laborRoom')}
+                    className={"flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-semibold text-sm transition-all " + (activeTab === 'laborRoom' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900')}
+                  >
+                    <i className="fa-solid fa-bed"></i> Labor Room
+                    <span className={"text-xs px-2 py-0.5 rounded-full ml-1 " + (admitted.length === MAX_BEDS ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700')}>
+                      {admitted.length}/{MAX_BEDS}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                {activeTab === 'waitlist' && (<div className="animate-in fade-in duration-300">{renderPatientTable(sortedWaitlist, true)}</div>)}
+                {activeTab === 'laborRoom' && (<div className="animate-in fade-in duration-300">{renderPatientTable(admitted, false)}</div>)}
+              </main>
+
+              <div className="fixed bottom-6 right-6 z-40 md:static md:mt-8 md:max-w-6xl md:mx-auto md:px-8">
+                <button 
+                  onClick={() => setShowAddForm(true)}
+                  className="bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-full md:rounded-xl p-4 md:py-3 md:px-6 shadow-lg shadow-fuchsia-500/40 flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 w-14 h-14 md:w-full md:h-auto border border-white/20"
+                >
+                  <i className="fa-solid fa-plus text-xl md:hidden"></i>
+                  <span className="hidden md:flex font-bold items-center gap-2"><i className="fa-solid fa-plus"></i> Add New Patient to Waitlist</span>
+                </button>
+              </div>
+
+              {showAddForm && renderAddPatientForm()}
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
